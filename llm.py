@@ -4,9 +4,13 @@ from ollama import ChatResponse
 
 messages=[
   {
-    'role': 'user',
-    'content': 'this is a system prompt',
+    'role': 'system',
+    'content': 'Hey, I am your data science assistant. How can I help you'
   },
+  {
+    'role': 'user',
+    'content': 'analyze my csv file'
+  }
 ]
 
 def call_llm(messages):
