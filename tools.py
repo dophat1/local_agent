@@ -1,6 +1,7 @@
 import pandas as pd 
 import sys
 from io import StringIO
+import duckdb
 
 def read_csv(file_path):
     df = pd.read_csv(file_path)
@@ -20,3 +21,25 @@ def python_runner(code):
     exec(code)
     sys.stdout = old_out
     return output.getvalue()
+
+
+def sql_query(query):
+    result = duckdb.sql(query)
+    return str(result)
+
+"""
+The agent loop receives this JSON from the LLM:
+json
+{
+    "tool": "csv_reader",
+    "input": "data.csv"
+}
+
+We need the dictionary to map the input to the tool so the program know which function to call.
+"""
+
+tools = {
+    "csv_reader": read_csv,
+    "python_runner": python_runner,
+    "sql_query": sql_query
+}

@@ -5,7 +5,7 @@ from ollama import ChatResponse
 messages=[
   {
     'role': 'system',
-    'content': 'Hey, I am your data science assistant. How can I help you'
+    'content': 'Hey, I am your data science assistant. How can I help you ?'
   },
   {
     'role': 'user',
