@@ -1,7 +1,6 @@
 import json
 from llm import call_llm
 from tools import tools
-import os
 
 SYSTEM_PROMPT = """
 You are an expert Data Scientist. Your goal is to analyze data and answer the user's questions accurately using your available tools.
@@ -13,17 +12,12 @@ You are an expert Data Scientist. Your goal is to analyze data and answer the us
 
 ### INTERACTION PROTOCOL
 
-Whenever you need to invoke a tool, respond with ONLY a single raw JSON object — 
-no prose before or after it, no markdown fences, no explanations.
-
-The "input" field must be valid JSON: encode multi-line code as a single string 
-with \\n for newlines (NOT Python triple-quoted strings).
-
-Example of a correctly formatted response:
-{"tool": "python_runner", "input": "fibonacci = [0, 1]\\nfor i in range(2, 8):\\n    fibonacci.append(fibonacci[-1] + fibonacci[-2])\\nprint(fibonacci[7])"}
-
-If you want to explain your reasoning, do it BEFORE deciding to call a tool, 
-in a separate turn — never mix prose and JSON in the same response.
+#### Phase 1: Tool Execution (Structured JSON)
+Whenever you need to invoke a tool, you MUST respond strictly with a JSON object. Do not include any conversational filler, markdown formatting outside the JSON, or thoughts. Use the following exact schema:
+{
+    "tool": "tool_name",
+    "input": "exact input arguments or queries required for the tool"
+}
 
 #### Phase 2: Final Answer (Plain Text)
 Once you have collected enough information from the tool outputs to comprehensively answer the user's question, you must transition out of JSON mode. Respond in clear, professional plain text with your final analysis and answer. Do not use the JSON format for your final response.
@@ -59,8 +53,32 @@ if user_file_path:
     messages.append(file_path)
 
 
+# A helper function to check json file
+def extract_json(text):
+    # finds first '{', tracks depth, returns the balanced substring
+    depth = 0
+    start = -1
+    
+    for index, letter in enumerate(text):
+        if letter == '{':
+            depth += 1
+            if start == -1:
+                start = index
+            
+        elif letter == '}':
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+            
+    
+attempts = 0
+max_attempts = 5
 
 while True:
+    if attempts >= max_attempts:
+        print("Max attempts reached, the program will stop")
+        break
+
 
     llm_output = call_llm(messages)
     messages.append(
@@ -71,33 +89,48 @@ while True:
     )
 
     # Clean the llm output before feed in
-    cleaned_output = llm_output.replace('```json', '').replace('```', '')
+    cleaned_output = llm_output.replace('```json', '').replace('```', '').strip()
 
-    try:
-        parsed = json.loads(cleaned_output)
-        if isinstance(parsed, dict):
-            tool_name = parsed['tool']
-            tool_function = tools[tool_name]
-            result = tool_function(parsed['input'])
-            messages.append(
-                {
-                    'role':'user',
-                    'content': result
-                }
-            )
-        else:
-            print(cleaned_output)
-            break
+    json_match = extract_json(cleaned_output)
 
-    except json.JSONDecodeError:
+    if not json_match:
+        # No JSON found at all -> this is a genuine final plain-text answer.
         print(cleaned_output)
         break
 
-    except KeyError:
+    try:
+        parsed = json.loads(json_match)
+    except json.JSONDecodeError:
+        # Looked like JSON but wasn't parseable -> treat as final answer.
+        print(cleaned_output)
+        break
+
+    if not isinstance(parsed, dict) or 'tool' not in parsed:
+        # Not actually a tool-call structure -> treat as final answer.
+        print(cleaned_output)
+        break
+
+    tool_name = parsed['tool']
+
+    if tool_name not in tools:
         messages.append(
             {
-                'role':'user',
-                'content':f"You have called the wrong in {tool_name}, there are only the following tools that you can call {tools.keys()}"
-
-            } 
+                'role': 'user',
+                'content': f"You have called the wrong tool '{tool_name}', there are only the following tools that you can call: {list(tools.keys())}"
+            }
         )
+        attempts += 1
+        continue
+
+    tool_function = tools[tool_name]
+    result, is_progress = tool_function(parsed['input'])
+    messages.append(
+        {
+            'role': 'user',
+            'content': result
+        }
+    )
+    if is_progress:
+        attempts = 0
+    else:
+        attempts += 1 

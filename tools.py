@@ -6,9 +6,9 @@ import duckdb
 def read_csv(file_path):
     try:
         df = pd.read_csv(file_path)
-        return df.to_string()
+        return df.to_string(), True
     except FileNotFoundError:
-        return f"The {file_path} is invalid, check it again."    
+        return f"The {file_path} is invalid, check it again.", False  
 
 
 """
@@ -24,11 +24,11 @@ def python_runner(code):
         old_out = sys.stdout
         output = sys.stdout = StringIO()
         exec(code)
-        return output.getvalue()
+        return output.getvalue(), True
 
     
     except Exception as e: 
-        return f"There is {e} in the code, check again."
+        return f"There is {e} in the code, check again.", False
     
     finally:
         sys.stdout = old_out
@@ -37,9 +37,9 @@ def python_runner(code):
 def sql_query(query):
     try:
         result = duckdb.sql(query)
-        return str(result)
+        return str(result), True
     except Exception as e:
-        return f"There is {e} when trying to query the data, check again."
+        return f"There is {e} when trying to query the data, check again.", False
 
 """
 The agent loop receives this JSON from the LLM:
